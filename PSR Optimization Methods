@@ -1,0 +1,79 @@
+library(nonlinearTseries)
+library(plot3D)
+library(ggplot2)
+library(tseriesChaos)
+library(Hmisc)
+library(rEDM)
+library(EntropyExplorer)
+library(devtools)
+library(ggfortify)
+library(factoextra)
+library(fNonlinear)
+
+mydata_dogecoin <- read.csv("coin_Dogecoin.csv")
+mydata_ethereum <- read.csv("coin_Ethereum.csv")
+mydata_bitcoin <- read.csv("coin_Bitcoin.csv")
+mydata_xrp <- read.csv("coin_XRP.csv")
+
+price <- mydata_ethereum$Close
+
+#time delay based on autocorrelation
+tau.acf <- timeLag(price, technique = "acf", lag.max = 200, do.plot = T)
+#time delay based on Mutual Information
+tau.ami <- timeLag(price, technique = "ami", lag.max = 100, do.plot = T)
+#Embedding Dimension using False Nearest Neighbors, best dimension is 3
+fnn.out = false.nearest(price, m = 20, d = tau.ami, t = 15, eps = sd(price)/10)
+#Embedding Dimension using Cao's(1997) algorithm
+emb.dim = estimateEmbeddingDim(price, time.lag = tau.ami,max.embedding.dim = 15)
+
+#Phase Space Reconstrucion
+price.takens <- buildTakens(price,emb.dim,tau.ami)
+
+# 2d plot
+plot(price.takens[,1],price.takens[,2],type='l')
+#plot3D Dimension
+lines3D(price.takens[,1],price.takens[,2],price.takens[,3],t="l", asp=1)
+
+#System Average Method
+#----------------------------------------------------------------------------------
+#time delay based on Mutual Information
+tau.ami_bitcoin <- timeLag(mydata_bitcoin$Close, technique = "ami", lag.max = 100, do.plot = T)
+tau.ami_dogecoin <- timeLag(mydata_dogecoin$Close, technique = "ami", lag.max = 100, do.plot = T)
+tau.ami_xrp <- timeLag(mydata_xrp$Close, technique = "ami", lag.max = 100, do.plot = T)
+
+tau.ami_average <- (tau.ami + tau.ami_bitcoin + tau.ami_dogecoin + tau.ami_xrp)/4
+tau.ami_average
+
+##Embedding Dimension using Cao's(1997) algorithm
+emb.dim_bitcoin = estimateEmbeddingDim(mydata_bitcoin$Close, time.lag = tau.ami,max.embedding.dim = 15)
+emb.dim_dogecoin = estimateEmbeddingDim(mydata_ethereum$Close, time.lag = tau.ami,max.embedding.dim = 15)
+emb.dim_xrp = estimateEmbeddingDim(mydata_xrp$Close, time.lag = tau.ami,max.embedding.dim = 15)
+
+emb.dim_average <- (emb.dim + emb.dim_bitcoin + emb.dim_dogecoin + emb.dim_xrp)/4
+emb.dim_average
+
+price.takens_average <- buildTakens(price,emb.dim_average,tau.ami_average)
+head(price.takens_average)
+#---------------------------------------------------------------------------------------------------
+#PCA method
+
+price.pca <- prcomp(price.takens, center = TRUE,scale. = TRUE)
+
+summary(price.pca)
+str(price.pca)
+
+biplot(price.pca)
+autoplot(price.pca)
+fviz_eig(price.pca, addlabels = TRUE, ylim = c(0, 100))
+
+sd.pca <- price.pca$sdev
+PC <- price.pca$rotation
+VarOfScores <-  price.pca$sd^2
+pca.scores <-  price.pca$x
+
+correlation <- cor(price.takens, pca.scores, method = "pearson")
+correlation
+
+pca.scores
+plot(pca.scores[,1],pca.scores[,2],type='l', xlab= "Component 1", ylab= "Component 2")
+lines3D(pca.scores[,1],pca.scores[,2],pca.scores[,3])
